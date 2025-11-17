@@ -1,6 +1,6 @@
 import base64
 from io import BytesIO
-from fastapi import FastAPI, Request, File, UploadFile
+from fastapi import FastAPI, Request, File, UploadFile,Form
 from PIL import Image
 import torch
 from transformers import AutoProcessor, AutoModelForVision2Seq
@@ -42,7 +42,8 @@ def load_image(upload_file: UploadFile):
 async def ocr(image: UploadFile = File(...)):
     img = load_image(image)
 
-    inputs = processor(images=img, return_tensors="pt")
+    # Pass empty text for OCR
+    inputs = processor(text="", images=img, return_tensors="pt")
     inputs = {k: v.to(device) for k, v in inputs.items()}
 
     output = model.generate(**inputs, max_new_tokens=512)
@@ -50,24 +51,22 @@ async def ocr(image: UploadFile = File(...)):
 
     return {"text": text}
 
+
 # -----------------------
 # Multimodal generation
 # -----------------------
 @app.post("/generate")
 async def generate(
-    request: Request,
-    image: UploadFile = File(None)
+    prompt: str = Form(...),       # read the prompt from the form
+    image: UploadFile = File(None) # read the optional image from the form
 ):
-    body = await request.json()
-    prompt = body.get("prompt", "")
-
     if image:
         img = load_image(image)
         inputs = processor(text=prompt, images=img, return_tensors="pt")
     else:
         inputs = processor(text=prompt, return_tensors="pt")
 
-    inputs = {k: v.to(device) for k, v in inputs.items()}
+    inputs = {k: v.to("cuda") for k, v in inputs.items()}
 
     output = model.generate(
         **inputs,
