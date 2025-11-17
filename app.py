@@ -57,22 +57,53 @@ async def ocr(image: UploadFile = File(...)):
 # -----------------------
 @app.post("/generate")
 async def generate(
-    prompt: str = Form(...),
+    request: Request,
     image: UploadFile = File(None)
 ):
-    if image:
-        img = load_image(image)
-        # Add <image> placeholder in prompt
-        inputs = processor(text=f"<image> {prompt}", images=img, return_tensors="pt")
-    else:
-        inputs = processor(text=prompt, return_tensors="pt")
+    try:
+        # Attempt to read JSON body
+        try:
+            body = await request.json()
+        except Exception as e:
+            print(f"[DEBUG] Failed to parse JSON body: {e}")
+            body = {}
 
-    inputs = {k: v.to("cuda") for k, v in inputs.items()}
+        prompt = body.get("prompt", "")
+        print(f"[DEBUG] Original prompt: {prompt}")
+        print(f"[DEBUG] Image provided: {bool(image)}")
 
-    output = model.generate(
-        **inputs,
-        max_new_tokens=512
-    )
+        # Auto-inject <image> if needed
+        if image and "<image>" not in prompt:
+            prompt = "<image> " + prompt
+            print(f"[DEBUG] Modified prompt with <image>: {prompt}")
 
-    response = processor.decode(output[0], skip_special_tokens=True)
-    return {"response": response}
+        # Load and process image if provided
+        if image:
+            img = load_image(image)
+            print(f"[DEBUG] Loaded image size: {img.size}")
+            inputs = processor(text=prompt, images=img, return_tensors="pt")
+        else:
+            inputs = processor(text=prompt, return_tensors="pt")
+
+        # Move tensors to device
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+        for k, v in inputs.items():
+            print(f"[DEBUG] Input tensor {k} shape: {v.shape}")
+
+        # Generate output
+        output = model.generate(
+            **inputs,
+            max_new_tokens=512
+        )
+        print(f"[DEBUG] Generated raw output length: {len(output[0])}")
+
+        # Decode response
+        response = processor.decode(output[0], skip_special_tokens=True)
+        print(f"[DEBUG] Decoded response: {response[:100]}...")  # only first 100 chars
+
+        return {"response": response}
+
+    except Exception as e:
+        # Catch all exceptions and return for debugging
+        print(f"[ERROR] Exception occurred: {e}")
+        return {"error": str(e)}
