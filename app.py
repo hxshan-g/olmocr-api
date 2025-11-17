@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request, File, UploadFile,Form
 from PIL import Image
 import torch
 from transformers import AutoProcessor, AutoModelForVision2Seq
-
+import io
 app = FastAPI(title="OlmOCR API")
 
 MODEL_NAME = "allenai/olmOCR-2-7B-1025"
@@ -55,28 +55,37 @@ async def ocr(image: UploadFile = File(...)):
 # -----------------------
 # Multimodal generation
 # -----------------------
-from fastapi import UploadFile, File, Form
+def load_image(upload_file: UploadFile):
+    return Image.open(io.BytesIO(upload_file.file.read())).convert("RGB")
+
 
 @app.post("/generate")
 async def generate(
-    image: UploadFile = File(None),
-    prompt: str = Form("")  # Get prompt from form-data instead of JSON
+    prompt: str = None,
+    image: UploadFile = File(None)
 ):
     try:
         print(f"[DEBUG] Original prompt: {prompt}")
         print(f"[DEBUG] Image provided: {bool(image)}")
 
-        # Auto-inject <image> placeholder if image exists but prompt doesn't have it
-        if image and "<image>" not in prompt:
-            prompt = "<image> " + (prompt or "Describe the image.")
-            print(f"[DEBUG] Modified prompt with <image>: {prompt}")
-
-        # Load and process image
+        # If image exists, inject correct processor image token
         if image:
+            image_token = processor.image_token  # correct special token for the model
+            if prompt is None:
+                prompt = "Describe the image."
+            if image_token not in prompt:
+                prompt = f"{image_token} {prompt}"
+            print(f"[DEBUG] Modified prompt with image token: {prompt}")
+
+            # Load image
             img = load_image(image)
             print(f"[DEBUG] Loaded image size: {img.size}")
+
+            # Prepare inputs
             inputs = processor(text=prompt, images=img, return_tensors="pt")
         else:
+            if prompt is None:
+                prompt = ""
             inputs = processor(text=prompt, return_tensors="pt")
 
         # Move tensors to device
@@ -95,8 +104,5 @@ async def generate(
         return {"response": response}
 
     except Exception as e:
-        # Catch all exceptions with traceback for better debugging
-        import traceback
         print(f"[ERROR] Exception occurred: {e}")
-        traceback.print_exc()
         return {"error": str(e)}
