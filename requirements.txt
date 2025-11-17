@@ -1,5 +1,10 @@
 fastapi
-uvicorn
+uvicorn[standard]
+pillow
+transformers>=4.42.0
 torch
-transformers
+torchvision
 accelerate
+sentencepiece
+protobuf
+numpy
