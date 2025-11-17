@@ -61,7 +61,7 @@ def load_image(upload_file: UploadFile):
 
 @app.post("/generate")
 async def generate(
-    prompt: str = None,
+    prompt: str = Form(None),   
     image: UploadFile = File(None)
 ):
     try:
