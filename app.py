@@ -55,29 +55,23 @@ async def ocr(image: UploadFile = File(...)):
 # -----------------------
 # Multimodal generation
 # -----------------------
+from fastapi import UploadFile, File, Form
+
 @app.post("/generate")
 async def generate(
-    request: Request,
-    image: UploadFile = File(None)
+    image: UploadFile = File(None),
+    prompt: str = Form("")  # Get prompt from form-data instead of JSON
 ):
     try:
-        # Attempt to read JSON body
-        try:
-            body = await request.json()
-        except Exception as e:
-            print(f"[DEBUG] Failed to parse JSON body: {e}")
-            body = {}
-
-        prompt = body.get("prompt", "")
         print(f"[DEBUG] Original prompt: {prompt}")
         print(f"[DEBUG] Image provided: {bool(image)}")
 
-        # Auto-inject <image> if needed
+        # Auto-inject <image> placeholder if image exists but prompt doesn't have it
         if image and "<image>" not in prompt:
-            prompt = "<image> " + prompt
+            prompt = "<image> " + (prompt or "Describe the image.")
             print(f"[DEBUG] Modified prompt with <image>: {prompt}")
 
-        # Load and process image if provided
+        # Load and process image
         if image:
             img = load_image(image)
             print(f"[DEBUG] Loaded image size: {img.size}")
@@ -91,19 +85,18 @@ async def generate(
             print(f"[DEBUG] Input tensor {k} shape: {v.shape}")
 
         # Generate output
-        output = model.generate(
-            **inputs,
-            max_new_tokens=512
-        )
+        output = model.generate(**inputs, max_new_tokens=512)
         print(f"[DEBUG] Generated raw output length: {len(output[0])}")
 
         # Decode response
         response = processor.decode(output[0], skip_special_tokens=True)
-        print(f"[DEBUG] Decoded response: {response[:100]}...")  # only first 100 chars
+        print(f"[DEBUG] Decoded response: {response[:200]}...")  # first 200 chars
 
         return {"response": response}
 
     except Exception as e:
-        # Catch all exceptions and return for debugging
+        # Catch all exceptions with traceback for better debugging
+        import traceback
         print(f"[ERROR] Exception occurred: {e}")
+        traceback.print_exc()
         return {"error": str(e)}
