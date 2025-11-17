@@ -57,12 +57,13 @@ async def ocr(image: UploadFile = File(...)):
 # -----------------------
 @app.post("/generate")
 async def generate(
-    prompt: str = Form(...),       # read the prompt from the form
-    image: UploadFile = File(None) # read the optional image from the form
+    prompt: str = Form(...),
+    image: UploadFile = File(None)
 ):
     if image:
         img = load_image(image)
-        inputs = processor(text=prompt, images=img, return_tensors="pt")
+        # Add <image> placeholder in prompt
+        inputs = processor(text=f"<image> {prompt}", images=img, return_tensors="pt")
     else:
         inputs = processor(text=prompt, return_tensors="pt")
 
